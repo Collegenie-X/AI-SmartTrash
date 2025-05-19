@@ -1,0 +1,8 @@
+plastic
+paper
+metal
+glass
+organic
+battery
+clothing
+electronic 

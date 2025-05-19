@@ -170,7 +170,7 @@ class CameraSection:
 
                     # Display the frame
                     camera_placeholder.image(
-                        frame_rgb, channels="RGB", use_column_width=True
+                        frame_rgb, channels="RGB", use_container_width=True
                     )
 
                     # Process frame based on interval setting
@@ -228,19 +228,11 @@ class CameraSection:
         """
         placeholder.markdown("### 분류 정보")
 
-        if category == "Jongphil":
-            placeholder.write(
-                """
-            ### Jongphil 분류
-            - 분류된 객체: Jongphil
-            - 추가 정보: 이 이미지는 Jongphil로 분류되었습니다.
+        # 카테고리 이름을 그대로 사용
+        placeholder.write(
+            f"""
+            ### {category} 분류
+            - 분류된 객체: {category}
+            - 추가 정보: 이 이미지는 {category}로 분류되었습니다.
             """
-            )
-        else:
-            placeholder.write(
-                """
-            ### 배경
-            - 분류된 객체: 배경
-            - 추가 정보: 이 이미지는 배경으로 분류되었습니다.
-            """
-            )
+        )

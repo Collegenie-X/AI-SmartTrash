@@ -7,16 +7,26 @@ import cv2
 import numpy as np
 from PIL import Image
 import time
-from utils.model_loader import ModelLoader
+import os
+from utils.model_loader import TFLiteModelLoader
 from utils.image_processor import ImageProcessor
-from config.settings import CATEGORIES
+from config.settings import CAMERA_SETTINGS
 
 
 class CameraSection:
     def __init__(self):
-        self.model_loader = ModelLoader()
+        # 환경 변수에서 직접 경로 가져오기
+        model_path = os.environ.get("MODEL_PATH")
+        labels_path = os.environ.get("LABELS_PATH")
+
+        # 디버그 출력
+        print(f"CameraSection - 모델 경로: {model_path}")
+        print(f"CameraSection - 라벨 경로: {labels_path}")
+
+        self.model_loader = TFLiteModelLoader(model_path, labels_path)
         self.image_processor = ImageProcessor()
         self.camera = None
+        self.last_prediction_time = 0
 
         # Initialize camera settings in session state
         if "camera_settings" not in st.session_state:
@@ -191,15 +201,11 @@ class CameraSection:
 
                             # Display results
                             result_placeholder.markdown("### 분류 결과")
-                            result_placeholder.success(
-                                f"분류: {CATEGORIES[predicted_class]}"
-                            )
+                            result_placeholder.success(f"분류: {predicted_class}")
                             result_placeholder.info(f"신뢰도: {confidence:.2%}")
 
-                            # Display recycling information
-                            self._display_recycling_info(
-                                predicted_class, result_placeholder
-                            )
+                            # Display information
+                            self._display_info(predicted_class, result_placeholder)
                         else:
                             result_placeholder.markdown("### 분류 결과")
                             result_placeholder.warning(
@@ -213,15 +219,28 @@ class CameraSection:
                 self.stop_camera()
                 st.session_state.camera_active = False
 
-    def _display_recycling_info(self, category, placeholder):
-        """Display recycling information based on the predicted category"""
-        recycling_info = {
-            0: "병은 깨끗이 씻어서 분리수거해주세요.",
-            1: "캔은 내용물을 비우고 깨끗이 씻어서 분리수거해주세요.",
-            2: "철은 다른 재활용품과 분리하여 배출해주세요.",
-            3: "유리는 깨끗이 씻어서 분리수거해주세요.",
-            4: "일반쓰레기는 종량제 봉투에 담아 배출해주세요.",
-        }
+    def _display_info(self, category: str, placeholder):
+        """Display information based on the predicted category
 
-        placeholder.markdown("### 분리수거 방법")
-        placeholder.write(recycling_info[category])
+        Args:
+            category (str): 분류된 카테고리
+            placeholder: Streamlit placeholder for displaying information
+        """
+        placeholder.markdown("### 분류 정보")
+
+        if category == "Jongphil":
+            placeholder.write(
+                """
+            ### Jongphil 분류
+            - 분류된 객체: Jongphil
+            - 추가 정보: 이 이미지는 Jongphil로 분류되었습니다.
+            """
+            )
+        else:
+            placeholder.write(
+                """
+            ### 배경
+            - 분류된 객체: 배경
+            - 추가 정보: 이 이미지는 배경으로 분류되었습니다.
+            """
+            )

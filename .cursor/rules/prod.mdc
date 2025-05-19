@@ -1,0 +1,30 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+ 
+ - Teachable Machine model을 이용하여 제작합니다. 
+ - python3.13 -m venv venv 파일로 진행합니다. 
+ - 가상환경을 만들고 requrements.txt로 관리해 주세요. 
+ - Steamlit - Front  , python - BackEnd
+
+ AI-SmartTrash/
+├── app/
+│   ├── __init__.py
+│   ├── main.py
+│   ├── components/
+│   │   ├── __init__.py
+│   │   ├── header.py
+│   │   └── prediction_section.py
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   ├── model_loader.py
+│   │   └── image_processor.py
+│   └── config/
+│       ├── __init__.py
+│       └── constants.py
+├── models/
+│   └── model.h5
+├── requirements.txt
+└── README.md

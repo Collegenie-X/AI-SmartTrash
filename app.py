@@ -52,7 +52,7 @@ class ModelManager:
 
     def preprocess_image(self, image):
         # 이미지를 모델 입력 크기로 조정
-        image = tf.image.resize(image, (224, 224))
+        image = tf.image.resize(image, (96, 96))
         # 정규화
         image = image / 255.0
         return image

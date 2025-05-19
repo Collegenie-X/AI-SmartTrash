@@ -4,7 +4,7 @@ Configuration constants for the Smart Trash Classification App
 
 # Model configuration
 MODEL_PATH = "models/model.h5"
-IMAGE_SIZE = (224, 224)
+IMAGE_SIZE = (96, 96)
 
 # Categories
 CATEGORIES = {0: "병", 1: "캔", 2: "철", 3: "유리", 4: "일반"}

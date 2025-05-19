@@ -8,7 +8,7 @@ def download_and_convert_model():
 
     # MobileNetV2 모델 다운로드
     model_url = (
-        "https://tfhub.dev/google/imagenet/mobilenet_v2_100_224/classification/4"
+        "https://tfhub.dev/google/imagenet/mobilenet_v2_100_96/classification/4"
     )
     model = tf.keras.Sequential(
         [
@@ -23,7 +23,7 @@ def download_and_convert_model():
     )
 
     # 입력 shape 설정
-    input_shape = (1, 224, 224, 3)
+    input_shape = (1, 96, 96, 3)
     model.build(input_shape)
 
     print("TFLite 모델로 변환 중...")

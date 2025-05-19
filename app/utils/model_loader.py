@@ -6,11 +6,16 @@ import numpy as np
 import tensorflow as tf
 import os
 import logging
+import warnings
 from typing import Tuple, List, Dict
+import cv2
 
 # 로그 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# TFLite Interpreter 경고 메시지 필터링
+warnings.filterwarnings('ignore', category=UserWarning, module='tensorflow.lite.python.interpreter')
 
 
 class TFLiteModelLoader:
@@ -131,20 +136,63 @@ class TFLiteModelLoader:
         """이미지 전처리
 
         Args:
-            image (np.ndarray): 입력 이미지
+            image (np.ndarray): 입력 이미지 (BGR 또는 그레이스케일)
 
         Returns:
-            np.ndarray: 전처리된 이미지
+            np.ndarray: 전처리된 이미지 (1채널)
         """
-        # 입력 텐서의 크기에 맞게 이미지 리사이즈
-        input_shape = self.input_details[0]["shape"]
-        resized_image = tf.image.resize(image, (input_shape[1], input_shape[2]))
+        try:
+            # 입력 이미지 검증
+            if image is None:
+                raise ValueError("입력 이미지가 None입니다.")
+            
+            if not isinstance(image, np.ndarray):
+                raise ValueError(f"잘못된 이미지 타입: {type(image)}, numpy.ndarray가 필요합니다.")
+            
+            if image.size == 0:
+                raise ValueError("이미지가 비어 있습니다.")
 
-        # 정규화 (0-1 범위로)
-        normalized_image = resized_image / 255.0
+            print(f"모델 전처리 입력 이미지 형태: {image.shape}")
+            
+            # 이미 전처리된 이미지인지 확인
+            if len(image.shape) == 4 and image.shape == (1, 96, 96, 1):
+                print("이미 전처리된 이미지입니다.")
+                return image
 
-        # 배치 차원 추가
-        return np.expand_dims(normalized_image, axis=0)
+            # 이미지 전처리
+            target_size = (96, 96)
+            
+            # BGR에서 그레이스케일로 변환
+            if len(image.shape) == 3 and image.shape[-1] == 3:
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            
+            # 크기 조정 (필요한 경우)
+            if image.shape[:2] != target_size:
+                image = cv2.resize(image, target_size)
+            
+            # 정규화 (0-1 범위로)
+            image = image.astype(np.float32) / 255.0
+
+            # 채널 차원 추가 (H,W) -> (H,W,1)
+            if len(image.shape) == 2:
+                image = np.expand_dims(image, axis=-1)
+
+            # 배치 차원 추가 (H,W,1) -> (1,H,W,1)
+            if len(image.shape) == 3:
+                image = np.expand_dims(image, axis=0)
+
+            print(f"모델 전처리 출력 이미지 형태: {image.shape}")
+
+            # 입력 텐서 형태 확인
+            input_shape = self.input_details[0]['shape']
+            if image.shape != tuple(input_shape):
+                raise ValueError(f"잘못된 입력 차원: got {image.shape}, expected {tuple(input_shape)}")
+
+            return image
+
+        except Exception as e:
+            print(f"모델 전처리 중 오류 발생: {str(e)}")
+            raise
 
     def predict(self, image: np.ndarray) -> Tuple[str, float]:
         """이미지 분류 예측

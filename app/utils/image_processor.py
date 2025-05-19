@@ -20,23 +20,56 @@ class ImageProcessor:
         """이미지 전처리
 
         Args:
-            image (np.ndarray): 입력 이미지
+            image (np.ndarray): 입력 이미지 (BGR 또는 그레이스케일)
 
         Returns:
-            np.ndarray: 전처리된 이미지
+            np.ndarray: 전처리된 이미지 (1채널)
         """
-        # 그레이스케일 변환
-        if len(image.shape) == 3:
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        try:
+            # 입력 이미지 검증
+            if image is None:
+                raise ValueError("입력 이미지가 None입니다.")
+            
+            if not isinstance(image, np.ndarray):
+                raise ValueError(f"잘못된 이미지 타입: {type(image)}, numpy.ndarray가 필요합니다.")
+            
+            if image.size == 0:
+                raise ValueError("이미지가 비어 있습니다.")
+            
+            if len(image.shape) not in [2, 3]:
+                raise ValueError(f"잘못된 이미지 차원: {len(image.shape)}, 2 또는 3이어야 합니다.")
 
-        # 크기 조정
-        image = cv2.resize(image, IMAGE_SIZE)
+            # BGR에서 그레이스케일로 변환
+            if len(image.shape) == 3:
+                if image.shape[2] not in [1, 3]:
+                    raise ValueError(f"잘못된 채널 수: {image.shape[2]}, 1 또는 3이어야 합니다.")
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-        # 채널 차원 추가 (필요한 경우)
-        if IMAGE_CHANNELS == 1:
+            # 크기 검증
+            if image.shape[0] == 0 or image.shape[1] == 0:
+                raise ValueError(f"잘못된 이미지 크기: {image.shape}")
+
+            # 크기 조정 (96x96으로 고정)
+            image = cv2.resize(image, (96, 96))
+
+            # 정규화 (0-1 범위로)
+            image = image.astype(np.float32) / 255.0
+
+            # 채널 차원 추가 (H,W) -> (H,W,1)
             image = np.expand_dims(image, axis=-1)
 
-        return image
+            # 배치 차원 추가 (H,W,1) -> (1,H,W,1)
+            image = np.expand_dims(image, axis=0)
+
+            # 최종 검증
+            if image.shape != (1, 96, 96, 1):
+                raise ValueError(f"최종 이미지 차원이 잘못됨: {image.shape}, 예상: (1, 96, 96, 1)")
+
+            return image
+
+        except Exception as e:
+            print(f"이미지 전처리 중 오류 발생: {str(e)}")
+            raise
 
     @staticmethod
     def apply_camera_settings(

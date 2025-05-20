@@ -162,7 +162,7 @@ def main():
         and st.session_state.model_manager.labels
     ):
         # 탭 생성
-        tab1, tab2 = st.tabs(["📸 이미지 업로드", "📹 실시간 카메라"])
+        tab1, tab2 = st.tabs(["📸 이미지 업로드", "📹 카메라 찍기"])
 
         # 이미지 업로드 탭
         with tab1:
@@ -183,7 +183,7 @@ def main():
 
         # 실시간 카메라 탭
         with tab2:
-            st.header("실시간 카메라로 분류하기")
+            st.header("카메라로 찍기")
             camera_placeholder = st.empty()
 
             if st.button("카메라 시작/정지", key="camera_toggle"):

@@ -33,7 +33,7 @@ else:
 
 LABELS_PATH = os.getenv("LABELS_PATH")
 if LABELS_PATH is None:
-    LABELS_PATH = str(MODELS_DIR / "labels.txt")
+    LABELS_PATH = str(MODELS_DIR / "")
     logging.getLogger(__name__).info(
         f"환경 변수 LABELS_PATH가 설정되지 않았습니다. 기본 경로 사용: {LABELS_PATH}"
     )

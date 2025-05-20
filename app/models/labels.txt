@@ -1,0 +1,7 @@
+0 Jongphil
+1 Background
+2 Bottle
+3 Can
+4 Metal
+5 Glass
+6 General Waste

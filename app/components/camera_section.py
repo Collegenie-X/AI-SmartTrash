@@ -3,7 +3,6 @@ Camera section component for real-time trash classification
 """
 
 import streamlit as st
-import cv2
 import numpy as np
 from PIL import Image
 import time
@@ -11,301 +10,321 @@ import os
 from utils.model_loader import TFLiteModelLoader
 from utils.image_processor import ImageProcessor
 from config.settings import CAMERA_SETTINGS
-
-# 전역 카메라 객체 초기화
-if "cap" not in st.session_state:
-    st.session_state.cap = None
-
-# 프레임 처리 관련 세션 상태 초기화
-if "frame" not in st.session_state:
-    st.session_state.frame = None
-if "last_process_time" not in st.session_state:
-    st.session_state.last_process_time = 0
-
+import cv2
 
 class CameraSection:
     def __init__(self):
+        print("CameraSection 초기화 시작")
+        
+        # Initialize session state
+        if "camera_state" not in st.session_state:
+            st.session_state["camera_state"] = {
+                "is_active": False,  # 카메라 활성화 상태
+                "last_prediction": None,
+                "prediction_count": 0,
+                "settings": {
+                    "confidence_threshold": 0.5,
+                }
+            }
+        
         # 환경 변수에서 직접 경로 가져오기
-        model_path = os.environ.get("MODEL_PATH")
-        labels_path = os.environ.get("LABELS_PATH")
+        model_path = os.path.join(os.getcwd(), "models", "model.tflite")
+        labels_path = os.path.join(os.getcwd(), "models", "labels.txt")
 
-        # 디버그 출력
-        print(f"CameraSection - 모델 경로: {model_path}")
-        print(f"CameraSection - 라벨 경로: {labels_path}")
+        print(f"모델 파일 경로: {model_path}")
+        print(f"라벨 파일 경로: {labels_path}")
+
+        # 파일 존재 확인
+        print(f"모델 파일 존재: {os.path.exists(model_path)}")
+        print(f"라벨 파일 존재: {os.path.exists(labels_path)}")
+
+        # 라벨 파일 로드
+        self.labels = self._load_labels(labels_path)
+        print(f"로드된 라벨: {self.labels}")
 
         self.model_loader = TFLiteModelLoader(model_path, labels_path)
         self.image_processor = ImageProcessor()
-        
-        # 세션 상태의 카메라 객체 참조
-        self.camera = st.session_state.cap
-        self.last_prediction_time = 0
+        print("CameraSection 초기화 완료")
 
-        # Initialize camera settings in session state
-        if "camera_settings" not in st.session_state:
-            st.session_state.camera_settings = {
-                "brightness": 0,
-                "contrast": 1.0,
-                "saturation": 1.0,
-                "process_interval": 2.0,
-                "confidence_threshold": 0.5,
-            }
-
-    def start_camera(self):
-        """Start the camera capture"""
+    def _load_labels(self, labels_path):
+        """라벨 파일을 로드하는 함수"""
         try:
-            print("카메라 초기화 시작...")
+            print(f"라벨 파일 로드 시도: {labels_path}")
+            with open(labels_path, 'r', encoding='utf-8') as f:
+                labels = []
+                for line in f.readlines():
+                    # Remove any whitespace and newlines
+                    label = line.strip()
+                    if not label:  # Skip empty lines
+                        continue
+                    # If the line starts with a number and space, remove it
+                    if ' ' in label and label.split(' ')[0].isdigit():
+                        label = label.split(' ', 1)[1]
+                    labels.append(label)
+                print(f"라벨 파일 로드 성공: {labels}")
+                return labels if labels else ["병", "캔", "철", "유리", "일반"]  # Fallback to default labels if empty
+        except Exception as e:
+            print(f"라벨 파일 로드 오류: {str(e)}")
+            # Return default labels if there's an error
+            default_labels = ["병", "캔", "철", "유리", "일반"]
+            print(f"기본 라벨 사용: {default_labels}")
+            return default_labels
+
+    def process_image(self, image):
+        """Process a single image and return prediction"""
+        try:
+            print("이미지 처리 시작")
+            print(f"입력 이미지 크기: {image.size}")
             
-            # macOS 카메라 접근 설정
-            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "capture_device_index=0"
-            os.environ["OPENCV_AVFOUNDATION_SKIP_AUTH"] = "1"
+            # Convert PIL Image to numpy array
+            img_array = np.array(image)
+            print(f"NumPy 배열 변환 후 형태: {img_array.shape}")
             
-            # 전역 카메라 객체가 이미 있는지 확인
-            if st.session_state.cap is not None:
-                print("기존 카메라 연결이 있습니다. 재사용합니다.")
-                self.camera = st.session_state.cap
-                
-                # 카메라가 여전히 열려있는지 확인
-                if not self.camera.isOpened():
-                    print("기존 카메라가 닫혀있습니다. 새로 연결합니다.")
-                    st.session_state.cap = None
-                else:
-                    print("기존 카메라가 정상입니다.")
-                    return True
+            # Convert RGB to BGR (if needed)
+            if len(img_array.shape) == 3 and img_array.shape[2] == 3:
+                img_array = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+                print("RGB에서 BGR로 변환 완료")
             
-            # 새 카메라 객체 생성 (가장 간단한 방법으로)
-            print("새 카메라 연결 시도...")
+            # Convert to grayscale
+            img_array = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY)
+            print(f"그레이스케일 변환 후 형태: {img_array.shape}")
             
-            # Windows/Linux와 macOS에서 모두 작동하는지 확인하기 위해 먼저 기본 방식 시도
-            st.session_state.cap = cv2.VideoCapture(0)
-            self.camera = st.session_state.cap
+            # Resize to 96x96
+            img_resized = cv2.resize(img_array, (96, 96))
+            print("이미지 리사이징 완료: 96x96")
             
-            # 카메라 상태 확인
-            if self.camera.isOpened():
-                print("카메라 연결 성공!")
-                
-                # 일부 테스트 프레임 읽기 시도
-                ret, frame = self.camera.read()
-                if ret:
-                    print(f"프레임 캡처 성공! 프레임 크기: {frame.shape}")
-                    return True
-                else:
-                    print("프레임 캡처 실패. 카메라는 열렸지만 프레임을 읽을 수 없습니다.")
+            # Normalize to 0-1 range
+            img_normalized = img_resized.astype(np.float32) / 255.0
+            print("이미지 정규화 완료")
+            
+            # Add channel dimension
+            img_processed = np.expand_dims(img_normalized, axis=-1)
+            print(f"채널 차원 추가 후 형태: {img_processed.shape}")
+            
+            # Add batch dimension
+            img_processed = np.expand_dims(img_processed, axis=0)
+            print(f"배치 차원 추가 후 최종 형태: {img_processed.shape}")
+            
+            # Get prediction
+            print("모델 예측 시작")
+            predicted_class_idx, confidence, all_predictions = self.model_loader.predict(img_processed)
+            print(f"예측 완료 - 인덱스: {predicted_class_idx}, 신뢰도: {confidence:.2%}")
+            
+            # 라벨에서 인덱스 제거하고 실제 클래스 이름만 추출
+            raw_label = self.labels[predicted_class_idx]
+            if ' ' in raw_label:
+                # "0 Bottle" -> "Bottle" 형태로 변환
+                class_name = raw_label.split(' ', 1)[1]
             else:
-                print("카메라 연결 실패. 다른 방법을 시도합니다.")
-                
-                # 대체 캡처 방법 시도
-                st.session_state.cap = cv2.VideoCapture(0, cv2.CAP_AVFOUNDATION)
-                self.camera = st.session_state.cap
-                
-                if self.camera.isOpened():
-                    print("대체 방법으로 카메라 연결 성공!")
-                    ret, frame = self.camera.read()
-                    if ret:
-                        print(f"대체 방법으로 프레임 캡처 성공! 프레임 크기: {frame.shape}")
-                        return True
-                
-                print("모든 카메라 연결 방법이 실패했습니다.")
-                self.camera = None
-                st.session_state.cap = None
-                return False
+                class_name = raw_label
+
+            # 두 번째로 높은 확률의 클래스 찾기
+            sorted_indices = np.argsort(all_predictions)[::-1]
+            second_class_idx = sorted_indices[1]
+            second_confidence = float(all_predictions[second_class_idx])
+            
+            # 두 번째 클래스의 라벨 처리
+            raw_second_label = self.labels[second_class_idx]
+            if ' ' in raw_second_label:
+                second_class_name = raw_second_label.split(' ', 1)[1]
+            else:
+                second_class_name = raw_second_label
+
+            # 한글 클래스명으로 변환
+            korean_names = {
+                'Bottle': '병',
+                'Can': '캔',
+                'Metal': '철',
+                'Glass': '유리',
+                'General Waste': '일반',
+                'Background': '배경',
+            }
+            
+            predicted_class = korean_names.get(class_name, class_name)
+            second_predicted_class = korean_names.get(second_class_name, second_class_name)
+            
+            print(f"최종 예측 결과 - 클래스: {predicted_class}, 신뢰도: {confidence:.2%}")
+            print(f"두 번째 예측 결과 - 클래스: {second_predicted_class}, 신뢰도: {second_confidence:.2%}")
+            
+            return {
+                "class": predicted_class,
+                "confidence": confidence,
+                "second_class": second_predicted_class,
+                "second_confidence": second_confidence,
+                "timestamp": time.time()
+            }
             
         except Exception as e:
-            print(f"카메라 초기화 중 예외 발생: {str(e)}")
-            self.stop_camera()
-            return False
-
-    def stop_camera(self):
-        """Stop the camera capture"""
-        try:
-            print("카메라 중지 시도...")
-            if st.session_state.cap is not None:
-                st.session_state.cap.release()
-                st.session_state.cap = None
-                print("카메라 연결 해제 완료")
-            self.camera = None
-            st.session_state.camera_initialized = False
-            st.session_state.camera_active = False
-            print("카메라 중지 완료")
-        except Exception as e:
-            print(f"카메라 중지 중 오류 발생: {str(e)}")
-            st.session_state.camera_active = False
-            st.session_state.camera_initialized = False
-            st.session_state.cap = None
-
-    def _apply_camera_settings(self):
-        """Apply camera settings"""
-        if self.camera is not None:
-            self.camera.set(
-                cv2.CAP_PROP_BRIGHTNESS, st.session_state.camera_settings["brightness"]
-            )
-            self.camera.set(
-                cv2.CAP_PROP_CONTRAST, st.session_state.camera_settings["contrast"]
-            )
-            self.camera.set(
-                cv2.CAP_PROP_SATURATION, st.session_state.camera_settings["saturation"]
-            )
-
-    def _adjust_frame(self, frame):
-        """Adjust frame based on camera settings"""
-        # Convert to float32 for calculations
-        frame_float = frame.astype(np.float32)
-
-        # Apply brightness
-        frame_float += st.session_state.camera_settings["brightness"]
-
-        # Apply contrast
-        frame_float = (frame_float - 128) * st.session_state.camera_settings[
-            "contrast"
-        ] + 128
-
-        # Apply saturation
-        hsv = cv2.cvtColor(frame_float.astype(np.uint8), cv2.COLOR_RGB2HSV)
-        hsv[:, :, 1] = hsv[:, :, 1] * st.session_state.camera_settings["saturation"]
-        frame_float = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
-
-        # Clip values to valid range
-        frame_float = np.clip(frame_float, 0, 255)
-
-        return frame_float.astype(np.uint8)
+            print(f"이미지 처리 중 오류 발생: {str(e)}")
+            import traceback
+            print(f"상세 오류: {traceback.format_exc()}")
+            return None
 
     def render(self):
         """Render the camera interface"""
         st.markdown("### 실시간 분류")
-
-        # Initialize session states
-        if "camera_active" not in st.session_state:
-            st.session_state.camera_active = False
-        if "camera_initialized" not in st.session_state:
-            st.session_state.camera_initialized = False
-            
-        # 세션에서 카메라 객체 참조 업데이트
-        self.camera = st.session_state.cap
-
-        # Create placeholders
-        status_placeholder = st.empty()
-        camera_placeholder = st.empty()
-        result_placeholder = st.empty()
-
-        # Camera settings
-        with st.expander("카메라 설정", expanded=False):
-            col1, col2 = st.columns(2)
-            with col1:
-                st.session_state.camera_settings["brightness"] = st.slider(
-                    "밝기", -100, 100, st.session_state.camera_settings["brightness"]
-                )
-                st.session_state.camera_settings["contrast"] = st.slider(
-                    "대비", 0.0, 2.0, st.session_state.camera_settings["contrast"], 0.1
-                )
-            with col2:
-                st.session_state.camera_settings["saturation"] = st.slider(
-                    "채도", 0.0, 2.0, st.session_state.camera_settings["saturation"], 0.1
-                )
-                st.session_state.camera_settings["process_interval"] = st.slider(
-                    "처리 간격 (초)", 0.5, 5.0, st.session_state.camera_settings["process_interval"], 0.5
-                )
-
-        # Camera control buttons
+        
+        # 카메라 컨트롤
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("카메라 시작"):
-                with st.spinner("카메라 초기화 중..."):
-                    if self.start_camera():
-                        st.session_state.camera_active = True
-                        st.session_state.camera_initialized = True
-                        status_placeholder.success("카메라가 시작되었습니다.")
-                    else:
-                        status_placeholder.error("카메라를 시작할 수 없습니다.")
-                        st.session_state.camera_active = False
-                        st.session_state.camera_initialized = False
-
+            if st.button("카메라 시작", disabled=st.session_state["camera_state"]["is_active"]):
+                st.session_state["camera_state"]["is_active"] = True
+                st.success("카메라가 시작되었습니다.")
+                st.rerun()
+                
         with col2:
-            if st.button("카메라 중지"):
-                self.stop_camera()
-                camera_placeholder.empty()
-                status_placeholder.info("카메라가 중지되었습니다.")
+            if st.button("카메라 중지", disabled=not st.session_state["camera_state"]["is_active"]):
+                st.session_state["camera_state"]["is_active"] = False
+                if "camera_input" in st.session_state:
+                    del st.session_state["camera_input"]
+                st.info("카메라가 중지되었습니다.")
+                st.rerun()
+        
+        # 카메라 상태 표시
+        if not st.session_state["camera_state"]["is_active"]:
+            st.warning("카메라가 비활성화되어 있습니다. '카메라 시작' 버튼을 눌러 활성화하세요.")
+            return
 
-        # Camera view and prediction
-        if st.session_state.camera_active and st.session_state.cap is not None:
+        # 결과 표시를 위한 컨테이너들 미리 생성
+        camera_container = st.container()
+        log_container = st.container()  # 로그를 위한 새 컨테이너
+        result_container = st.container()
+        guide_container = st.container()
+        
+        # 카메라 입력 (카메라가 활성화된 경우에만)
+        with camera_container:
+            camera_image = st.camera_input(
+                "쓰레기를 카메라에 비춰주세요",
+                key="camera_input",
+                disabled=not st.session_state["camera_state"]["is_active"]
+            )
+        
+        # 이미지가 캡처되면 처리
+        if camera_image is not None:
             try:
-                # 카메라 피드 처리 함수 정의
-                def process_camera_feed():
-                    # 카메라 객체 상태 확인
-                    if not st.session_state.cap.isOpened():
-                        status_placeholder.error("카메라가 열려있지 않습니다.")
-                        return
-                        
-                    # 프레임 처리 루프
-                    stop_button_pressed = st.button("중지", key="stop_feed")
+                # 이미지 열기
+                image = Image.open(camera_image)
+                
+                # 진행 상태 표시
+                with st.spinner("이미지 분석 중..."):
+                    # 이미지 처리 및 예측
+                    prediction = self.process_image(image)
+                
+                if prediction:
+                    # 로그 정보 표시
+                    with log_container:
+                        st.markdown("### 📝 분석 로그")
+                        st.code(f"""
+이미지 분석 시작
+예측된 클래스: {prediction['class']} (신뢰도: {prediction['confidence']:.2%})
+두 번째 예측: {prediction['second_class']} (신뢰도: {prediction['second_confidence']:.2%})
+분석 시각: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(prediction['timestamp']))}
+누적 분석 횟수: {st.session_state["camera_state"]["prediction_count"]}
+                        """)
                     
-                    # 프레임 표시를 위한 이미지 컨테이너
-                    img_container = camera_placeholder.empty()
+                    # 세션 상태 업데이트
+                    st.session_state["camera_state"]["last_prediction"] = prediction
+                    st.session_state["camera_state"]["prediction_count"] += 1
                     
-                    while st.session_state.camera_active and not stop_button_pressed:
-                        ret, frame = st.session_state.cap.read()
-                        if not ret or frame is None:
-                            status_placeholder.error("프레임을 읽을 수 없습니다.")
-                            break
+                    # 분류 가능 여부 확인
+                    recyclable_classes = ["병", "캔", "철", "유리", "일반"]
+                    non_recyclable = ['배경', 'Jongphil', 'Background']
+                    
+                    # 결과를 별도의 컨테이너에 표시
+                    with result_container:
+                        if prediction['class'] in non_recyclable:
+                            st.warning(f"⚠️ '{prediction['class']}'- 분리수거 가능한 물체가 감지되지 않았습니다. 다시 시도해주세요.")
+                            return
                             
-                        # BGR에서 RGB로 변환
-                        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                        st.success("✅ 이미지 분석이 완료되었습니다!")
                         
-                        # 프레임 조정 적용 (설정에 따라)
-                        adjusted_frame = self._adjust_frame(rgb_frame)
+                        # 분류 결과를 마크다운 형식으로 표시
+                        st.markdown("""
+                        ### 📊 분석 결과
+                        ---
+                        """)
                         
-                        # 이미지 컨테이너 업데이트
-                        img_container.image(
-                            adjusted_frame,
-                            channels="RGB",
-                            caption="카메라 피드",
-                            use_container_width=True
+                        # 결과 카드 스타일 적용
+                        st.markdown("""
+                        <style>
+                        .result-metric {
+                            font-size: 1.2em;
+                            color: #0066cc;
+                            font-weight: bold;
+                            padding: 10px;
+                            background-color: #f8f9fa;
+                            border-radius: 5px;
+                            margin: 5px 0;
+                        }
+                        .confidence-high {
+                            color: #00cc66;
+                        }
+                        .confidence-medium {
+                            color: #ffcc00;
+                        }
+                        .confidence-low {
+                            color: #ff6666;
+                        }
+                        .result-details {
+                            margin-top: 10px;
+                            padding: 10px;
+                            background-color: #f8f9fa;
+                            border-radius: 5px;
+                        }
+                        </style>
+                        """, unsafe_allow_html=True)
+                        
+                        # 신뢰도에 따른 색상 클래스 결정
+                        confidence_class = (
+                            "confidence-high" if prediction['confidence'] > 0.5
+                            else "confidence-medium" if prediction['confidence'] > 0.4
+                            else "confidence-low"
                         )
                         
-                        # 모델 예측 처리 (일정 간격으로)
-                        current_time = time.time()
-                        if (current_time - st.session_state.last_process_time 
-                            > st.session_state.camera_settings["process_interval"]):
-                            
-                            # 모델 입력을 위한 이미지 처리
-                            frame_resized = cv2.resize(frame, (96, 96))
-                            gray_frame = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2GRAY)
-                            processed_image = self.image_processor.preprocess_image(gray_frame)
-                            
-                            # 예측 실행
-                            predicted_class, confidence = self.model_loader.predict(processed_image)
-                            
-                            # 마지막 처리 시간 업데이트
-                            st.session_state.last_process_time = current_time
-                            
-                            # 결과 표시
-                            result_placeholder.markdown(f"""
-                            ### 분류 결과
-                            - 분류: {predicted_class}
-                            - 신뢰도: {confidence:.2%}
-                            """)
+                        # 결과 표시
+                        st.markdown(f"""
+                        #### 🎯 인식 결과
+                        <div class="result-metric">
+                            감지된 객체: {prediction['class']}
+                        </div>
                         
-                        # 일정 시간 대기 (프레임 속도 제한)
-                        time.sleep(0.033)  # ~30 FPS
-                
-                # 카메라 피드 처리 실행
-                process_camera_feed()
-                
+                        #### 📊 신뢰도
+                        <div class="result-metric {confidence_class}">
+                            {prediction['confidence']:.1%}
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    # 분리수거 가이드를 별도의 컨테이너에 표시
+                    with guide_container:
+                        # 신뢰도 차이가 작은 경우 (20% 이내) 두 클래스 모두 표시
+                        if abs(prediction['confidence'] - prediction['second_confidence']) < 0.2:
+                            st.markdown("---")
+                            st.info(f"""
+                            ℹ️ 두 가지 항목이 비슷한 확률로 감지되었습니다:
+                            1. {prediction['class']} ({prediction['confidence']:.1%})
+                            2. {prediction['second_class']} ({prediction['second_confidence']:.1%})
+                            """)
+                            
+                            # 두 클래스 모두에 대해 분리수거 가이드 표시
+                            for cls in [prediction['class'], prediction['second_class']]:
+                                if cls in recyclable_classes:
+                                    st.markdown(f"### {cls}의 분리수거 방법")
+                                    self._display_disposal_guide(cls)
+
+                        else:
+                            # 단일 클래스에 대한 기존 로직
+                            if prediction['class'] in recyclable_classes:
+                                st.markdown("---")
+                                self._display_disposal_guide(prediction['class'])
+                            
+                else:
+                    st.warning("⚠️ 이미지를 분석할 수 없습니다. 다시 시도해주세요.")
             except Exception as e:
-                print(f"카메라 작동 중 오류 발생: {str(e)}")
-                status_placeholder.error(f"카메라 작동 중 오류가 발생했습니다: {str(e)}")
-                # 카메라 객체 상태 초기화가 필요하면 재설정
-                if "카메라가 열려있지 않습니다" in str(e) or "프레임을 읽을 수 없습니다" in str(e):
-                    self.stop_camera()
+                st.error(f"❌ 이미지 처리 중 오류가 발생했습니다: {str(e)}")
 
     def _display_info(self, category: str, placeholder):
-        """Display information based on the predicted category
-
-        Args:
-            category (str): 분류된 카테고리
-            placeholder: Streamlit placeholder for displaying information
-        """
+        """Display information based on the predicted category"""
         placeholder.markdown("### 분류 정보")
-
-        # 카테고리 이름을 그대로 사용
         placeholder.write(
             f"""
             ### {category} 분류
@@ -313,3 +332,19 @@ class CameraSection:
             - 추가 정보: 이 이미지는 {category}로 분류되었습니다.
             """
         )
+
+    def _display_disposal_guide(self, waste_class):
+        """Display disposal guide for the classified waste"""
+        guides = {
+            "병": "1. 내용물을 비우고 물로 헹궈주세요.\n2. 라벨을 제거해주세요.\n3. 병만 분리수거함에 넣어주세요.",
+            "캔": "1. 내용물을 비우고 물로 헹궈주세요.\n2. 찌그러뜨려 부피를 줄여주세요.\n3. 캔 분리수거함에 넣어주세요.",
+            "철": "1. 이물질을 제거해주세요.\n2. 크기가 큰 경우 적당한 크기로 잘라주세요.\n3. 철 분리수거함에 넣어주세요.",
+            "유리": "1. 깨진 유리는 신문지에 싸서 배출해주세요.\n2. 내용물을 비우고 물로 헹궈주세요.\n3. 유리 분리수거함에 넣어주세요.",
+            "일반": "1. 일반 쓰레기봉투에 넣어주세요.\n2. 음식물이 묻은 경우 음식물 쓰레기로 분리해주세요."
+        }
+        
+        if waste_class in guides:
+            st.markdown("### 분리수거 방법")
+            st.info(guides[waste_class])
+        else:
+            st.warning(f"'{waste_class}' 해당 분류에 대한 분리수거 가이드가 없습니다.")

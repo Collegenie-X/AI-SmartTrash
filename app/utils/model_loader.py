@@ -194,32 +194,49 @@ class TFLiteModelLoader:
             print(f"모델 전처리 중 오류 발생: {str(e)}")
             raise
 
-    def predict(self, image: np.ndarray) -> Tuple[str, float]:
+    def predict(self, image: np.ndarray) -> Tuple[int, float, np.ndarray]:
         """이미지 분류 예측
 
         Args:
             image (np.ndarray): 입력 이미지
 
         Returns:
-            Tuple[str, float]: (예측 클래스, 신뢰도)
+            Tuple[int, float, np.ndarray]: (예측 클래스 인덱스, 신뢰도, 전체 예측 확률)
         """
-        # 이미지 전처리
-        input_data = self.preprocess_image(image)
+        try:
+            # 이미지 전처리
+            input_data = self.preprocess_image(image)
+            print(f"전처리된 이미지 shape: {input_data.shape}")
 
-        # 입력 텐서 설정
-        self.interpreter.set_tensor(self.input_details[0]["index"], input_data)
+            # 입력 텐서 설정
+            self.interpreter.set_tensor(self.input_details[0]["index"], input_data)
 
-        # 추론 실행
-        self.interpreter.invoke()
+            # 추론 실행
+            print("모델 추론 실행")
+            self.interpreter.invoke()
 
-        # 출력 텐서 가져오기
-        output_data = self.interpreter.get_tensor(self.output_details[0]["index"])
+            # 출력 텐서 가져오기
+            output_data = self.interpreter.get_tensor(self.output_details[0]["index"])
+            print(f"출력 데이터 shape: {output_data.shape}")
+            print(f"출력 데이터: {output_data}")
 
-        # 예측 결과 처리
-        predicted_class = np.argmax(output_data[0])
-        confidence = float(output_data[0][predicted_class])
+            # 예측 결과 처리
+            predictions = output_data[0]
+            predicted_class_idx = np.argmax(predictions)
+            confidence = float(predictions[predicted_class_idx])
 
-        return self.labels[predicted_class], confidence
+            print(f"예측된 클래스 인덱스: {predicted_class_idx}")
+            print(f"신뢰도: {confidence:.2%}")
+            print(f"전체 라벨 목록: {self.labels}")
+            print(f"예측된 라벨: {self.labels[predicted_class_idx]}")
+
+            return predicted_class_idx, confidence, predictions
+
+        except Exception as e:
+            print(f"예측 중 오류 발생: {str(e)}")
+            import traceback
+            print(f"상세 오류: {traceback.format_exc()}")
+            raise
 
     def get_labels(self) -> List[str]:
         """라벨 리스트 반환

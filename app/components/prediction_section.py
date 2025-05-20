@@ -115,12 +115,12 @@ class PredictionSection:
                             with log_container:
                                 st.markdown("### 📝 분석 로그")
                                 st.code(f"""
-이미지 분석 시작
-예측된 클래스: {prediction['class']} (신뢰도: {prediction['confidence']:.2%})
-두 번째 예측: {prediction['second_class']} (신뢰도: {prediction['second_confidence']:.2%})
-분석 시각: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(prediction['timestamp']))}
-누적 분석 횟수: {st.session_state["prediction_state"]["prediction_count"]}
-                                """)
+                                        이미지 분석 시작
+                                        예측된 클래스: {prediction['class']} (신뢰도: {prediction['confidence']:.2%})
+                                        두 번째 예측: {prediction['second_class']} (신뢰도: {prediction['second_confidence']:.2%})
+                                        분석 시각: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(prediction['timestamp']))}
+                                        누적 분석 횟수: {st.session_state["prediction_state"]["prediction_count"]}
+                                        """)
 
                             # 세션 상태 업데이트
                             st.session_state["prediction_state"]["last_prediction"] = prediction
@@ -133,7 +133,7 @@ class PredictionSection:
                             # 결과를 별도의 컨테이너에 표시
                             with result_container:
                                 if prediction['class'] in non_recyclable:
-                                    st.warning("⚠️ 분리수거 가능한 물체가 감지되지 않았습니다. 다시 시도해주세요.")
+                                    st.warning(f"⚠️ '{prediction['class']}'- 분리수거 가능한 물체가 감지되지 않았습니다. 다시 시도해주세요.")
                                     return
 
                                 st.success("✅ 이미지 분석이 완료되었습니다!")
@@ -333,4 +333,4 @@ class PredictionSection:
             st.markdown("### 분리수거 방법")
             st.info(guides[waste_class])
         else:
-            st.warning("해당 분류에 대한 분리수거 가이드가 없습니다.")
+            st.warning(f"'{waste_class}'-해당 분류에 대한 분리수거 가이드가 없습니다.")

@@ -31,15 +31,17 @@ pip install -r requirements.txt
 ## 실행 방법
 
 1. 모델 파일 준비
-- Teachable Machine에서 학습된 모델(.h5)을 `models/model.h5` 경로에 저장
+- Teachable Machine에서 학습된 모델(.tflite)을 `app/models/model.tflite` 경로에 저장
+- Teachable Machine에서 학습된 모델(.tflite)을 `app/models/model.labels` 경로에 저장
 
-2. 애플리케이션 실행
+2. 애플리케이션 실행 (Streamlit Run)
+
 ```bash
-streamlit run app/main.py
+cd app 
+streamlit run main.py
 ```
 
 ## 프로젝트 구조
-
 ```
 AI-SmartTrash/
 ├── app/
